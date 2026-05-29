@@ -70,16 +70,16 @@ let result: Task<Result<unit,  string>> = deleteItem id
 
 ### Types
 
-| Type | Description |
-|------|-------------|
-| `CacheInput<'Item, 'ItemId, 'ItemMsg>` | Discriminated union of `CreateItem`, `ReadItem`, `UpdateItem`, `DeleteItem` |
-| `Input<'Item, 'ItemId, 'ItemMsg>` | A `CacheInput` with a `CorrelationId: Guid` |
-| `CacheOutput<'ItemId, 'Item>` | Either `PersistItemOnDB` or `DeleteItemOnDB`, each carrying the id and a `Result` |
-| `Output<'ItemId, 'Item>` | A `CacheOutput` with a `CorrelationId: Guid` |
+| Type                                   | Description                                                                       |
+| -------------------------------------- | --------------------------------------------------------------------------------- |
+| `CacheInput<'Item, 'ItemId, 'ItemMsg>` | Discriminated union of `CreateItem`, `ReadItem`, `UpdateItem`, `DeleteItem`       |
+| `Input<'Item, 'ItemId, 'ItemMsg>`      | A `CacheInput` with a `CorrelationId: Guid`                                       |
+| `CacheOutput<'ItemId, 'Item>`          | Either `PersistItemOnDB` or `DeleteItemOnDB`, each carrying the id and a `Result` |
+| `Output<'ItemId, 'Item>`               | A `CacheOutput` with a `CorrelationId: Guid`                                      |
 
 ### Functions
 
-| Function | Signature |
-|----------|-----------|
-| `obsCache` | `('Item -> IObservable<Result<'Item, string>>) -> ('ItemId -> IObservable<Result<'Item, string>>) -> ('ItemId -> IObservable<Result<unit, string>>) -> ('ItemMsg -> 'Item -> 'Item) -> TimeSpan -> IObservable<Input<'Item, 'ItemId, 'ItemMsg>> -> IObservable<Guid * CacheOutput<'ItemId, 'Item>>` |
-| `createHelperFunctions` | Same first five parameters; returns `(('ItemId * 'Item) -> Task<Result<'Item, string>>) * ('ItemId -> Task<Result<'Item, string>>) * (('ItemId * 'ItemMsg) -> Task<Result<'Item, string>>) * ('ItemId -> Task<Result<unit, string>>)` |
+| Function                | Signature                                                                                                                                                                                                                                                                                           |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `obsCache`              | `('Item -> IObservable<Result<'Item, string>>) -> ('ItemId -> IObservable<Result<'Item, string>>) -> ('ItemId -> IObservable<Result<unit, string>>) -> ('ItemMsg -> 'Item -> 'Item) -> TimeSpan -> IObservable<Input<'Item, 'ItemId, 'ItemMsg>> -> IObservable<Guid * CacheOutput<'ItemId, 'Item>>` |
+| `createHelperFunctions` | Same first five parameters; returns `(('ItemId * 'Item) -> Task<Result<'Item, string>>) * ('ItemId -> Task<Result<'Item, string>>) * (('ItemId * 'ItemMsg) -> Task<Result<'Item, string>>) * ('ItemId -> Task<Result<unit, string>>)`                                                               |
