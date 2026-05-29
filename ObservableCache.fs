@@ -143,6 +143,7 @@ let obsCache
                 }))
             |> Observable.subscribe (fun output -> ())
             |> ignore
+            
             outputObservable
         )
 
