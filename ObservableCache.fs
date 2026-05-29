@@ -157,13 +157,7 @@ let createHelperFunctions
     let inputSubject =
         new System.Reactive.Subjects.Subject<Input<'Item, 'ItemId, 'ItemMsg>>()
 
-    let pendingItemRequests =
-        ConcurrentDictionary<Guid, System.Threading.Tasks.TaskCompletionSource<Result<'Item, string>>>()
-
-    let pendingDeleteRequests =
-        ConcurrentDictionary<Guid, System.Threading.Tasks.TaskCompletionSource<Result<unit, string>>>()
-
-    let temp =
+    let outputObservable =
         obsCache
             createOrUpdateItemOnDatabase
             readItemOnDatabase
@@ -171,6 +165,15 @@ let createHelperFunctions
             updateItem
             evictionDelay
             inputSubject
+
+    let pendingItemRequests =
+        ConcurrentDictionary<Guid, System.Threading.Tasks.TaskCompletionSource<Result<'Item, string>>>()
+
+    let pendingDeleteRequests =
+        ConcurrentDictionary<Guid, System.Threading.Tasks.TaskCompletionSource<Result<unit, string>>>()
+
+    let temp =
+        outputObservable
         |> Observable.subscribe (fun (correlationGuid, output) ->
             match output with
             | CreateItemOnDB(_, result)
@@ -208,4 +211,4 @@ let createHelperFunctions
 
         tcs.Task
 
-    CreateItem >> dispatch, ReadItem >> dispatch, UpdateItem >> dispatch, DeleteItem >> dispatchDelete
+    CreateItem >> dispatch, ReadItem >> dispatch, UpdateItem >> dispatch, DeleteItem >> dispatchDelete, outputObservable
