@@ -82,9 +82,8 @@ let obsCache
                          | _ -> false
                  ))
                 (group |> Observable.throttle evictionDelay))
-    |> Observable.bind (fun groupedObservable ->
-        groupedObservable
-        |> Observable.bind (fun input ->
+    |> Observable.bind (
+        Observable.bind (fun input ->
             match input.CacheInput with
             | CreateItem(itemId, item) ->
                 (itemId,
@@ -114,10 +113,9 @@ let obsCache
                 |> Observable.single
                 |> Observable.map DeleteItemOnDB
             |> Observable.map (fun co -> input.CorrelationId, co))
-        |> Observable.publish
-        |> Observable.refCount
-        |> fun outputObservable ->
-
+        >> Observable.publish
+        >> Observable.refCount
+        >> fun outputObservable ->
             outputObservable
             |> Observable.takeLast 1
             |> Observable.bind (fun (correlationId, cacheOutput) ->
@@ -145,7 +143,6 @@ let obsCache
                 }))
             |> Observable.subscribe (fun output -> ())
             |> ignore
-
             outputObservable
         )
 
