@@ -20,7 +20,7 @@ type CacheOutput<'ItemId, 'Item> =
     | CreateItemOnDB of 'ItemId * Result<'Item, string>
     | ReadItemOnDB of 'ItemId * Result<'Item, string>
     | UpdateItemOnDB of 'ItemId * Result<'Item, string>
-    | DeleteItemOnDB of 'ItemId * Result<unit, string>
+    | DeleteItemOnDB of 'ItemId * Result<'ItemId, string>
 
 type Output<'ItemId, 'Item> = {
     CorrelationId: Guid
@@ -108,8 +108,8 @@ let obsCache
             | DeleteItem itemId ->
                 (itemId,
                     match itemCache.TryRemove itemId with
-                    | true, _ -> Ok()
-                    | false, _ -> Ok())
+                    | true, _ -> Ok itemId
+                    | false, _ -> Ok itemId)
                 |> Observable.single
                 |> Observable.map DeleteItemOnDB
             |> Observable.map (fun co -> input.CorrelationId, co))
@@ -129,12 +129,12 @@ let obsCache
                 | DeleteItemOnDB(itemId, result) ->
                     match result with
                     | Error err -> (itemId, Error err) |> Observable.single
-                    | Ok() ->
+                    | Ok _ ->
                         deleteItemOnDatabase itemId
                         |> Observable.map (fun result ->
                             itemId,
                             match result with
-                            | Ok() -> Ok()
+                            | Ok() -> Ok itemId
                             | Error err -> Error err)
                     |> Observable.map DeleteItemOnDB
                 |> Observable.map (fun co -> {
@@ -161,7 +161,7 @@ let createHelperFunctions
         ConcurrentDictionary<Guid, System.Threading.Tasks.TaskCompletionSource<Result<'Item, string>>>()
 
     let pendingDeleteRequests =
-        ConcurrentDictionary<Guid, System.Threading.Tasks.TaskCompletionSource<Result<unit, string>>>()
+        ConcurrentDictionary<Guid, System.Threading.Tasks.TaskCompletionSource<Result<'ItemId, string>>>()
 
     let temp =
         obsCache
@@ -198,7 +198,7 @@ let createHelperFunctions
 
     let dispatchDelete msg =
         let correlationId = Guid.NewGuid()
-        let tcs = System.Threading.Tasks.TaskCompletionSource<Result<unit, string>>()
+        let tcs = System.Threading.Tasks.TaskCompletionSource<Result<'ItemId, string>>()
         pendingDeleteRequests[correlationId] <- tcs
 
         inputSubject.OnNext {
