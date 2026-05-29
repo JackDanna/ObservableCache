@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+
+# NuGet packages
+*.nupkg
+*.snupkg
+
+# User-specific files
+*.user
+.vs/
+
+# Rider
+.idea/
+
+# VS Code
+.vscode/

@@ -147,7 +147,8 @@ let createHelperFunctions
     (updateItem: 'ItemMsg -> 'Item -> 'Item)
     (evictionDelay: TimeSpan)
     =
-    let inputSubject = new Subject<Input<'Item, 'ItemId, 'ItemMsg>>()
+    let inputSubject =
+        new System.Reactive.Subjects.Subject<Input<'Item, 'ItemId, 'ItemMsg>>()
 
     let pendingItemRequests =
         ConcurrentDictionary<Guid, System.Threading.Tasks.TaskCompletionSource<Result<'Item, string>>>()
