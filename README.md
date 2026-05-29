@@ -45,13 +45,13 @@ let outputObservable =
 
 ### High-level: `createHelperFunctions`
 
-Returns four typed dispatch functions — the recommended entry point for most use cases.
+Returns four typed dispatch functions and the raw output observable — the recommended entry point for most use cases.
 
 ```fsharp
 open ObservableCache
 open System
 
-let createItem, readItem, updateItem, deleteItem =
+let createItem, readItem, updateItem, deleteItem, outputObservable =
     createHelperFunctions
         saveToDatabase      // MyItem -> IObservable<Result<MyItem, string>>
         loadFromDatabase    // Guid   -> IObservable<Result<MyItem, string>>
@@ -59,11 +59,13 @@ let createItem, readItem, updateItem, deleteItem =
         applyMessage        // MyItemMsg -> MyItem -> MyItem
         (TimeSpan.FromSeconds 30.0)
 
-// Each returns a Task<Result<_, string>>
+// Dispatch functions return Tasks
 let result: Task<Result<MyItem, string>> = createItem (id, item)
 let result: Task<Result<MyItem, string>> = readItem id
 let result: Task<Result<MyItem, string>> = updateItem (id, msg)
 let result: Task<Result<unit,  string>> = deleteItem id
+
+// outputObservable emits all cache operations as (CorrelationId * CacheOutput) pairs
 ```
 
 ## API
@@ -74,7 +76,7 @@ let result: Task<Result<unit,  string>> = deleteItem id
 | -------------------------------------- | --------------------------------------------------------------------------------- |
 | `CacheInput<'Item, 'ItemId, 'ItemMsg>` | Discriminated union of `CreateItem`, `ReadItem`, `UpdateItem`, `DeleteItem`       |
 | `Input<'Item, 'ItemId, 'ItemMsg>`      | A `CacheInput` with a `CorrelationId: Guid`                                       |
-| `CacheOutput<'ItemId, 'Item>`          | Either `PersistItemOnDB` or `DeleteItemOnDB`, each carrying the id and a `Result` |
+| `CacheOutput<'ItemId, 'Item>`          | `CreateItemOnDB`, `ReadItemOnDB`, `UpdateItemOnDB`, `DeleteItemOnDB` — each carrying the `'ItemId` and a `Result` |
 | `Output<'ItemId, 'Item>`               | A `CacheOutput` with a `CorrelationId: Guid`                                      |
 
 ### Functions
@@ -82,4 +84,4 @@ let result: Task<Result<unit,  string>> = deleteItem id
 | Function                | Signature                                                                                                                                                                                                                                                                                           |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `obsCache`              | `('Item -> IObservable<Result<'Item, string>>) -> ('ItemId -> IObservable<Result<'Item, string>>) -> ('ItemId -> IObservable<Result<unit, string>>) -> ('ItemMsg -> 'Item -> 'Item) -> TimeSpan -> IObservable<Input<'Item, 'ItemId, 'ItemMsg>> -> IObservable<Guid * CacheOutput<'ItemId, 'Item>>` |
-| `createHelperFunctions` | Same first five parameters; returns `(('ItemId * 'Item) -> Task<Result<'Item, string>>) * ('ItemId -> Task<Result<'Item, string>>) * (('ItemId * 'ItemMsg) -> Task<Result<'Item, string>>) * ('ItemId -> Task<Result<unit, string>>)`                                                               |
+| `createHelperFunctions` | Same first five parameters; returns `(('ItemId * 'Item) -> Task<Result<'Item, string>>) * ('ItemId -> Task<Result<'Item, string>>) * (('ItemId * 'ItemMsg) -> Task<Result<'Item, string>>) * ('ItemId -> Task<Result<unit, string>>) * IObservable<Guid * CacheOutput<'ItemId, 'Item>>` |
