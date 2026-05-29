@@ -21,14 +21,14 @@ jobs:
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
       - name: Restore
-        run: dotnet restore ObservableCache/ObservableCache.fsproj
+        run: dotnet restore ObservableCache.fsproj
 
       - name: Build
-        run: dotnet build ObservableCache/ObservableCache.fsproj --configuration Release --no-restore
+        run: dotnet build ObservableCache.fsproj --configuration Release --no-restore
 
       - name: Pack
         run: >
-          dotnet pack ObservableCache/ObservableCache.fsproj
+          dotnet pack ObservableCache.fsproj
           --configuration Release
           --no-build
           --output nupkgs
