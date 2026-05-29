@@ -172,20 +172,20 @@ let createHelperFunctions
     let pendingDeleteRequests =
         ConcurrentDictionary<Guid, System.Threading.Tasks.TaskCompletionSource<Result<unit, string>>>()
 
-    let temp =
-        outputObservable
-        |> Observable.subscribe (fun (correlationGuid, output) ->
-            match output with
-            | CreateItemOnDB(_, result)
-            | ReadItemOnDB(_, result)
-            | UpdateItemOnDB(_, result) ->
-                match pendingItemRequests.TryRemove correlationGuid with
-                | true, tcs -> tcs.SetResult result
-                | false, _ -> ()
-            | DeleteItemOnDB(_, result) ->
-                match pendingDeleteRequests.TryRemove correlationGuid with
-                | true, tcs -> tcs.SetResult result
-                | false, _ -> ())
+    outputObservable
+    |> Observable.subscribe (fun (correlationGuid, output) ->
+        match output with
+        | CreateItemOnDB(_, result)
+        | ReadItemOnDB(_, result)
+        | UpdateItemOnDB(_, result) ->
+            match pendingItemRequests.TryRemove correlationGuid with
+            | true, tcs -> tcs.SetResult result
+            | false, _ -> ()
+        | DeleteItemOnDB(_, result) ->
+            match pendingDeleteRequests.TryRemove correlationGuid with
+            | true, tcs -> tcs.SetResult result
+            | false, _ -> ())
+    |> ignore
 
     let dispatch msg =
         let correlationId = Guid.NewGuid()
