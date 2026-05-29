@@ -17,7 +17,9 @@ type Input<'Item, 'ItemId, 'ItemMsg> = {
 }
 
 type CacheOutput<'ItemId, 'Item> =
-    | PersistItemOnDB of 'ItemId * Result<'Item, string>
+    | CreateItemOnDB of 'ItemId * Result<'Item, string>
+    | ReadItemOnDB of 'ItemId * Result<'Item, string>
+    | UpdateItemOnDB of 'ItemId * Result<'Item, string>
     | DeleteItemOnDB of 'ItemId * Result<unit, string>
 
 type Output<'ItemId, 'Item> = {
@@ -47,6 +49,20 @@ let obsCache
                     | false -> Error "Failed to add item to cache")
             )
         |> Observable.map (fun result -> itemId, result)
+    
+    let persistItemOnDatabase (itemId: 'ItemId) (result: Result<'Item, string>) =
+        match result with
+        | Error err -> (itemId, Error err) |> Observable.single
+        | Ok item ->
+            item
+            |> createOrUpdateItemOnDatabase
+            |> Observable.map (fun result ->
+                itemId,
+                result
+                |> Result.bind (fun databaseItem ->
+                    match itemCache.TryRemove itemId with
+                    | true, _ -> Ok databaseItem
+                    | false, _ -> Error "Failed to remove item from cache after persist"))
 
     inputObservable
     |> Observable.groupByUntil
@@ -77,8 +93,8 @@ let obsCache
                      | true -> Ok item
                      | false -> Error "Item already exists in cache")
                     |> Observable.single
-                    |> Observable.map PersistItemOnDB
-                | ReadItem itemId -> getItem itemId |> Observable.map PersistItemOnDB
+                    |> Observable.map CreateItemOnDB
+                | ReadItem itemId -> getItem itemId |> Observable.map ReadItemOnDB
                 | UpdateItem(itemId, itemMsg) ->
                     getItem itemId
                     |> Observable.map (fun (itemId, itemResult) ->
@@ -90,7 +106,7 @@ let obsCache
                             match itemCache.TryUpdate(itemId, updatedItem, item) with
                             | true -> Ok updatedItem
                             | false -> Error "Failed to update item in cache"))
-                    |> Observable.map PersistItemOnDB
+                    |> Observable.map UpdateItemOnDB
                 | DeleteItem itemId ->
                     (itemId,
                      match itemCache.TryRemove itemId with
@@ -106,20 +122,12 @@ let obsCache
         |> Observable.takeLast 1
         |> Observable.bind (fun (correlationId, cacheOutput) ->
             match cacheOutput with
-            | PersistItemOnDB(itemId, result) ->
-                match result with
-                | Error err -> (itemId, Error err) |> Observable.single
-                | Ok item ->
-                    item
-                    |> createOrUpdateItemOnDatabase
-                    |> Observable.map (fun result ->
-                        itemId,
-                        result
-                        |> Result.bind (fun databaseItem ->
-                            match itemCache.TryRemove itemId with
-                            | true, _ -> Ok databaseItem
-                            | false, _ -> Error "Failed to remove item from cache after persist"))
-                |> Observable.map PersistItemOnDB
+            | CreateItemOnDB(itemId, result) ->
+                persistItemOnDatabase itemId result |> Observable.map CreateItemOnDB
+            | ReadItemOnDB(itemId, result) ->
+                persistItemOnDatabase itemId result |> Observable.map ReadItemOnDB
+            | UpdateItemOnDB(itemId, result) ->
+                persistItemOnDatabase itemId result |> Observable.map UpdateItemOnDB
             | DeleteItemOnDB(itemId, result) ->
                 match result with
                 | Error err -> (itemId, Error err) |> Observable.single
@@ -166,7 +174,9 @@ let createHelperFunctions
             inputSubject
         |> Observable.subscribe (fun (correlationGuid, output) ->
             match output with
-            | PersistItemOnDB(_, result) ->
+            | CreateItemOnDB(_, result)
+            | ReadItemOnDB(_, result)
+            | UpdateItemOnDB(_, result) ->
                 match pendingItemRequests.TryRemove correlationGuid with
                 | true, tcs -> tcs.SetResult result
                 | false, _ -> ()
