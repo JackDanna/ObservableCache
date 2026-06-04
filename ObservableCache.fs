@@ -155,8 +155,11 @@ let createHelperFunctions
     (updateItem: 'ItemMsg -> 'Item -> 'Item)
     (evictionDelay: TimeSpan)
     =
-    let inputSubject =
+    let rawSubject =
         new System.Reactive.Subjects.Subject<Input<'Item, 'ItemId, 'ItemMsg>>()
+
+    let inputSubject: ISubject<Input<'Item,'ItemId,'ItemMsg>> =
+        System.Reactive.Subjects.Subject.Synchronize rawSubject 
 
     let outputObservable =
         obsCache
@@ -165,7 +168,7 @@ let createHelperFunctions
             deleteItemOnDatabase
             updateItem
             evictionDelay
-            inputSubject
+            rawSubject
 
     let pendingItemRequests =
         ConcurrentDictionary<Guid, System.Threading.Tasks.TaskCompletionSource<Result<'Item, string>>>()
