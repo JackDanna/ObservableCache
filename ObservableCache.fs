@@ -158,7 +158,7 @@ let createHelperFunctions
     let rawSubject =
         new System.Reactive.Subjects.Subject<Input<'Item, 'ItemId, 'ItemMsg>>()
 
-    let inputSubject: ISubject<Input<'Item,'ItemId,'ItemMsg>> =
+    let inputSubject =
         System.Reactive.Subjects.Subject.Synchronize rawSubject 
 
     let outputObservable =
