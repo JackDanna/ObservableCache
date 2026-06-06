@@ -32,14 +32,32 @@ open System
 open System.Reactive.Subjects
 open FSharp.Control.Reactive
 
+type MyItem = { Id: Guid; Name: string }
+type MyItemMsg = { Name: string }
+
+let update (msg: MyItemMsg) (item: MyItem) =
+    { item with Name = msg.Name }
+
 let inputSubject = new Subject<Input<MyItem, Guid, MyItemMsg>>()
+
+let updateItemOnDatabase (item: MyItem) : Async<Result<MyItem, string>> =
+    // Persist the item here.
+    Ok item |> async.Return
+
+let readItemOnDatabase (id: Guid) : Async<Result<MyItem, string>> =
+    // Load the item here.
+    Ok { Id = id; Name = "loaded" } |> async.Return
+
+let deleteItemOnDatabase (id: Guid) : Async<Result<unit, string>> =
+    // Delete the item here.
+    Ok () |> async.Return
 
 let outputObservable =
     obsCache
-        saveToDatabase      // MyItem -> IObservable<Result<MyItem, string>>
-        loadFromDatabase    // Guid   -> IObservable<Result<MyItem, string>>
-        deleteFromDatabase  // Guid   -> IObservable<Result<unit, string>>
-        applyMessage        // MyItemMsg -> MyItem -> MyItem
+        updateItemOnDatabase
+        readItemOnDatabase
+        deleteItemOnDatabase
+        update
         (TimeSpan.FromSeconds 30.0)
         inputSubject
 ```
@@ -52,19 +70,22 @@ Returns four typed dispatch functions and the raw output observable — the reco
 open ObservableCache
 open System
 
+let id = Guid.NewGuid()
+let item = { Id = id; Name = "created" }
+let msg = { Name = "updated" }
+
 let createItem, readItem, updateItem, deleteItem, outputObservable =
     createHelperFunctions
-        saveToDatabase      // MyItem -> IObservable<Result<MyItem, string>>
-        loadFromDatabase    // Guid   -> IObservable<Result<MyItem, string>>
-        deleteFromDatabase  // Guid   -> IObservable<Result<unit, string>>
-        applyMessage        // MyItemMsg -> MyItem -> MyItem
+        updateItemOnDatabase // MyItem -> Async<Result<MyItem, string>>
+        readItemOnDatabase // Guid   -> Async<Result<MyItem, string>>
+        deleteItemOnDatabase  // Guid   -> Async<Result<unit, string>>
+        update        // MyItemMsg -> MyItem -> MyItem
         (TimeSpan.FromSeconds 30.0)
 
-// Dispatch functions return Tasks
-let result: Task<Result<MyItem, string>> = createItem (id, item)
-let result: Task<Result<MyItem, string>> = readItem id
-let result: Task<Result<MyItem, string>> = updateItem (id, msg)
-let result: Task<Result<unit,  string>> = deleteItem id
+let createResult = createItem (id, item)
+let readResult = readItem id
+let updateResult = updateItem (id, msg)
+let deleteResult = deleteItem id
 
 // outputObservable emits all cache operations as (CorrelationId * CacheOutput) pairs
 ```
@@ -73,16 +94,22 @@ let result: Task<Result<unit,  string>> = deleteItem id
 
 ### Types
 
-| Type                                   | Description                                                                       |
-| -------------------------------------- | --------------------------------------------------------------------------------- |
-| `CacheInput<'Item, 'ItemId, 'ItemMsg>` | Discriminated union of `CreateItem`, `ReadItem`, `UpdateItem`, `DeleteItem`       |
-| `Input<'Item, 'ItemId, 'ItemMsg>`      | A `CacheInput` with a `CorrelationId: Guid`                                       |
+| Type                                   | Description                                                                                                       |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `CacheInput<'Item, 'ItemId, 'ItemMsg>` | Discriminated union of `CreateItem`, `ReadItem`, `UpdateItem`, `DeleteItem`                                       |
+| `Input<'Item, 'ItemId, 'ItemMsg>`      | A `CacheInput` with a `CorrelationId: Guid`                                                                       |
 | `CacheOutput<'ItemId, 'Item>`          | `CreateItemOnDB`, `ReadItemOnDB`, `UpdateItemOnDB`, `DeleteItemOnDB` — each carrying the `'ItemId` and a `Result` |
-| `Output<'ItemId, 'Item>`               | A `CacheOutput` with a `CorrelationId: Guid`                                      |
+| `Output<'ItemId, 'Item>`               | A `CacheOutput` with a `CorrelationId: Guid`                                                                      |
 
 ### Functions
 
-| Function                | Signature                                                                                                                                                                                                                                                                                           |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `obsCache`              | `('Item -> IObservable<Result<'Item, string>>) -> ('ItemId -> IObservable<Result<'Item, string>>) -> ('ItemId -> IObservable<Result<unit, string>>) -> ('ItemMsg -> 'Item -> 'Item) -> TimeSpan -> IObservable<Input<'Item, 'ItemId, 'ItemMsg>> -> IObservable<Guid * CacheOutput<'ItemId, 'Item>>` |
-| `createHelperFunctions` | Same first five parameters; returns `(('ItemId * 'Item) -> Task<Result<'Item, string>>) * ('ItemId -> Task<Result<'Item, string>>) * (('ItemId * 'ItemMsg) -> Task<Result<'Item, string>>) * ('ItemId -> Task<Result<unit, string>>) * IObservable<Guid * CacheOutput<'ItemId, 'Item>>` |
+| Function                | Signature                                                                                                                                                                                                                                                                               |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `obsCache`              | `('Item -> Async<Result<'Item, string>>) -> ('ItemId -> Async<Result<'Item, string>>) -> ('ItemId -> Async<Result<unit, string>>) -> ('ItemMsg -> 'Item -> 'Item) -> TimeSpan -> IObservable<Input<'Item, 'ItemId, 'ItemMsg>> -> IObservable<Guid * CacheOutput<'ItemId, 'Item>>`       |
+| `createHelperFunctions` | Same first five parameters; returns typed `create`, `read`, `update`, and `delete` helper functions plus an `IObservable<Guid * CacheOutput<'ItemId, 'Item>>` |
+
+## Notes
+
+- Database callbacks return `Async<Result<_, string>>`; ObservableCache converts them into observables internally where needed.
+- Use `createHelperFunctions` when callers need typed CRUD helpers.
+- Use `obsCache` directly when you already have an observable input stream and want to subscribe to all raw cache outputs.
