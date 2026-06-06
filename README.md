@@ -33,10 +33,12 @@ open System.Reactive.Subjects
 open FSharp.Control.Reactive
 
 type MyItem = { Id: Guid; Name: string }
-type MyItemMsg = { Name: string }
+type MyItemMsg =
+    | Rename of string
 
 let update (msg: MyItemMsg) (item: MyItem) =
-    { item with Name = msg.Name }
+    match msg with
+    | Rename name -> { item with Name = name }
 
 let inputSubject = new Subject<Input<MyItem, Guid, MyItemMsg>>()
 
@@ -72,7 +74,7 @@ open System
 
 let id = Guid.NewGuid()
 let item = { Id = id; Name = "created" }
-let msg = { Name = "updated" }
+let msg = Rename "updated"
 
 let createItem, readItem, updateItem, deleteItem, outputObservable =
     createHelperFunctions
