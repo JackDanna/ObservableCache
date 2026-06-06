@@ -113,6 +113,8 @@ let obsCache
             (None, None)
         >> AsyncSeq.toObservable
         >> Observable.choose (fun (_, processorOutputs) -> processorOutputs)
+        >> Observable.publish
+        >> Observable.refCount
         >> fun outputObservable ->
             outputObservable
             |> Observable.takeLast 1
