@@ -27,8 +27,8 @@ let readFromDb (itemId: string) : Async<Result<string, string>> =
 let saveToDb (item: string) : Async<Result<string, string>> =
     async.Return (Ok item)
 
-let deleteFromDb (_itemId: string) : IObservable<Result<unit, string>> =
-    Observable.single (Ok ())
+let deleteFromDb (_itemId: string) : Async<Result<unit, string>> =
+    async.Return (Ok ())
 
 let applyMsg (msg: string) (item: string) : string =
     $"{item}+{msg}"

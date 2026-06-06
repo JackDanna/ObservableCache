@@ -37,7 +37,7 @@ let cacheInputToItemId =
 let obsCache
     (createOrUpdateItemOnDatabase: 'Item -> Async<Result<'Item, string>>)
     (readItemOnDatabase: 'ItemId -> Async<Result<'Item, string>>)
-    (deleteItemOnDatabase: 'ItemId -> IObservable<Result<unit, string>>)
+    (deleteItemOnDatabase: 'ItemId -> Async<Result<unit, string>>)
     (updateItem: 'ItemMsg -> 'Item -> 'Item)
     (evictionDelay: TimeSpan)
     (inputObservable: IObservable<Input<'Item, 'ItemId, 'ItemMsg>>)
@@ -138,6 +138,7 @@ let obsCache
                     | Error err -> (itemId, Error err) |> Observable.single
                     | Ok() ->
                         deleteItemOnDatabase itemId
+                        |> Observable.ofAsync
                         |> Observable.map (fun result ->
                             itemId,
                             match result with
@@ -157,7 +158,7 @@ let obsCache
 let createHelperFunctions
     (createOrUpdateItemOnDatabase: 'Item -> Async<Result<'Item, string>>)
     (readItemOnDatabase: 'ItemId -> Async<Result<'Item, string>>)
-    (deleteItemOnDatabase: 'ItemId -> IObservable<Result<unit, string>>)
+    (deleteItemOnDatabase: 'ItemId -> Async<Result<unit, string>>)
     (updateItem: 'ItemMsg -> 'Item -> 'Item)
     (evictionDelay: TimeSpan)
     =
