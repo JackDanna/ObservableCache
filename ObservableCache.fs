@@ -72,9 +72,16 @@ let obsCache
                          | _ -> false
                  ))
                 (group |> Observable.throttle evictionDelay))
-    |> Observable.bind (
-        AsyncSeq.ofObservableBuffered
-        >> AsyncSeq.scanAsync
+    |> Observable.bind (fun group ->
+        // Subscribe to the group synchronously before any async scheduling happens.
+        // ReplaySubject buffers all items and replays them to late subscribers,
+        // so AsyncSeq.ofObservableBuffered never misses the first item.
+        let replay = new ReplaySubject<_>()
+        group.Subscribe replay |> ignore
+
+        replay
+        |> AsyncSeq.ofObservableBuffered
+        |> AsyncSeq.scanAsync
             (fun (state: 'Item option, cacheOutput: Option<Guid * CacheOutput<'ItemId, 'Item>>) input ->
 
                 match input.CacheInput with
@@ -111,11 +118,11 @@ let obsCache
 
             )
             (None, None)
-        >> AsyncSeq.toObservable
-        >> Observable.choose (fun (_, processorOutputs) -> processorOutputs)
-        >> Observable.publish
-        >> Observable.refCount
-        >> fun outputObservable ->
+        |> AsyncSeq.toObservable
+        |> Observable.choose (fun (_, processorOutputs) -> processorOutputs)
+        |> Observable.publish
+        |> Observable.refCount
+        |> fun outputObservable ->
             outputObservable
             |> Observable.takeLast 1
             |> Observable.bind (fun (correlationId, cacheOutput) ->
