@@ -34,7 +34,7 @@ let cacheInputToItemId =
     | UpdateItem(itemId, _) -> itemId
     | DeleteItem itemId -> itemId
 
-let obsCache2
+let obsCache
     (createOrUpdateItemOnDatabase: 'Item -> IObservable<Result<'Item, string>>)
     (readItemOnDatabase: 'ItemId -> Async<Result<'Item, string>>)
     (deleteItemOnDatabase: 'ItemId -> IObservable<Result<unit, string>>)
@@ -144,128 +144,9 @@ let obsCache2
 
     )
 
-let obsCache
-    (createOrUpdateItemOnDatabase: 'Item -> IObservable<Result<'Item, string>>)
-    (readItemOnDatabase: 'ItemId -> IObservable<Result<'Item, string>>)
-    (deleteItemOnDatabase: 'ItemId -> IObservable<Result<unit, string>>)
-    (updateItem: 'ItemMsg -> 'Item -> 'Item)
-    (evictionDelay: TimeSpan)
-    (inputObservable: IObservable<Input<'Item, 'ItemId, 'ItemMsg>>)
-    =
-    let itemCache = ConcurrentDictionary<'ItemId, 'Item>()
-
-    let getItem itemId =
-        match itemCache.TryGetValue itemId with
-        | true, item -> Ok item |> Observable.single
-        | false, _ ->
-            readItemOnDatabase itemId
-            |> Observable.map (
-                Result.bind (fun item ->
-                    match itemCache.TryAdd(itemId, item) with
-                    | true -> Ok item
-                    | false -> Error "Failed to add item to cache")
-            )
-        |> Observable.map (fun result -> itemId, result)
-
-    let persistItemOnDatabase (itemId: 'ItemId) (result: Result<'Item, string>) =
-        match result with
-        | Error err -> (itemId, Error err) |> Observable.single
-        | Ok item ->
-            item
-            |> createOrUpdateItemOnDatabase
-            |> Observable.map (fun result ->
-                itemId,
-                result
-                |> Result.bind (fun databaseItem ->
-                    match itemCache.TryRemove itemId with
-                    | true, _ -> Ok databaseItem
-                    | false, _ -> Error "Failed to remove item from cache after persist"))
-
-    inputObservable
-    |> Observable.groupByUntil
-        (_.CacheInput
-         >> function
-             | CreateItem(itemId, _) -> itemId
-             | ReadItem itemId -> itemId
-             | UpdateItem(itemId, _) -> itemId
-             | DeleteItem itemId -> itemId)
-        (fun group ->
-            Observable.merge
-                (group
-                 |> Observable.filter (
-                     _.CacheInput
-                     >> function
-                         | DeleteItem _ -> true
-                         | _ -> false
-                 ))
-                (group |> Observable.throttle evictionDelay))
-    |> Observable.bind (
-        Observable.map (fun input ->
-            match input.CacheInput with
-            | CreateItem(itemId, item) ->
-                (itemId,
-                 match itemCache.TryAdd(itemId, item) with
-                 | true -> Ok item
-                 | false -> Error "Item already exists in cache")
-                |> Observable.single
-                |> Observable.map CreateItemOnDB
-            | ReadItem itemId -> getItem itemId |> Observable.map ReadItemOnDB
-            | UpdateItem(itemId, itemMsg) ->
-                getItem itemId
-                |> Observable.map (fun (itemId, itemResult) ->
-                    itemId,
-                    itemResult
-                    |> Result.bind (fun item ->
-                        let updatedItem = updateItem itemMsg item
-
-                        match itemCache.TryUpdate(itemId, updatedItem, item) with
-                        | true -> Ok updatedItem
-                        | false -> Error "Failed to update item in cache"))
-                |> Observable.map UpdateItemOnDB
-            | DeleteItem itemId ->
-                (itemId,
-                 match itemCache.TryRemove itemId with
-                 | true, _ -> Ok()
-                 | false, _ -> Ok())
-                |> Observable.single
-                |> Observable.map DeleteItemOnDB
-            |> Observable.map (fun co -> input.CorrelationId, co))
-        >> Observable.concatInner
-        >> Observable.publish
-        >> Observable.refCount
-        >> fun outputObservable ->
-            outputObservable
-            |> Observable.takeLast 1
-            |> Observable.bind (fun (correlationId, cacheOutput) ->
-                match cacheOutput with
-                | CreateItemOnDB(itemId, result) ->
-                    persistItemOnDatabase itemId result |> Observable.map CreateItemOnDB
-                | ReadItemOnDB(itemId, result) -> persistItemOnDatabase itemId result |> Observable.map ReadItemOnDB
-                | UpdateItemOnDB(itemId, result) ->
-                    persistItemOnDatabase itemId result |> Observable.map UpdateItemOnDB
-                | DeleteItemOnDB(itemId, result) ->
-                    match result with
-                    | Error err -> (itemId, Error err) |> Observable.single
-                    | Ok() ->
-                        deleteItemOnDatabase itemId
-                        |> Observable.map (fun result ->
-                            itemId,
-                            match result with
-                            | Ok() -> Ok()
-                            | Error err -> Error err)
-                    |> Observable.map DeleteItemOnDB
-                |> Observable.map (fun co ->
-                    { CorrelationId = correlationId
-                      CacheOutput = co }))
-            |> Observable.subscribe (fun output -> ())
-            |> ignore
-
-            outputObservable
-    )
-
 let createHelperFunctions
     (createOrUpdateItemOnDatabase: 'Item -> IObservable<Result<'Item, string>>)
-    (readItemOnDatabase: 'ItemId -> IObservable<Result<'Item, string>>)
+    (readItemOnDatabase: 'ItemId -> Async<Result<'Item, string>>)
     (deleteItemOnDatabase: 'ItemId -> IObservable<Result<unit, string>>)
     (updateItem: 'ItemMsg -> 'Item -> 'Item)
     (evictionDelay: TimeSpan)
