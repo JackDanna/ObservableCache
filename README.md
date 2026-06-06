@@ -10,14 +10,15 @@ dotnet add package ObservableCache
 
 ## Overview
 
-ObservableCache sits between your application and your database. Operations flow in as an `IObservable<Input>`, items are cached in memory, and persistence to the database is handled automatically on eviction. Each operation carries a `CorrelationId` so results can be matched back to the caller.
+ObservableCache sits between your application and your database. Operations flow in as an `IObservable<Input>`, items are processed sequentially per key, and persistence to the database is handled automatically on eviction. Each operation carries a `CorrelationId` so results can be matched back to the caller.
 
 ### How it works
 
-1. **Create / Update** — items are written to the in-memory cache immediately and persisted to the database when evicted.
-2. **Read** — items are served from the cache if present; otherwise fetched from the database and cached.
-3. **Delete** — items are removed from the cache immediately and deleted from the database.
+1. **Create / Update** — items are written to the per-key cache state immediately and persisted to the database when evicted.
+2. **Read** — items are served from the per-key cache state if present; otherwise fetched from the database and cached.
+3. **Delete** — items are removed from the per-key cache state immediately and deleted from the database.
 4. **Eviction** — items are evicted (and persisted) after a configurable idle `TimeSpan` with no activity, or immediately on delete.
+5. **Concurrency** — operations for the same key are processed sequentially; operations for different keys may run concurrently.
 
 ## Usage
 
