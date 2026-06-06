@@ -53,41 +53,41 @@ let temp (observableOfInput: IObservable<Input<'Item, 'ItemId, 'ItemMsg>>) (read
         None
 
 let obsCache
-    (createOrUpdateItemOnDatabase: 'Item -> Async<Result<'Item, string>>)
-    (readItemOnDatabase: 'ItemId -> Async<Result<'Item, string>>)
-    (deleteItemOnDatabase: 'ItemId -> Async<Result<unit, string>>)
+    (createOrUpdateItemOnDatabase: 'Item -> IObservable<Result<'Item, string>>)
+    (readItemOnDatabase: 'ItemId -> IObservable<Result<'Item, string>>)
+    (deleteItemOnDatabase: 'ItemId -> IObservable<Result<unit, string>>)
     (updateItem: 'ItemMsg -> 'Item -> 'Item)
     (evictionDelay: TimeSpan)
     (inputObservable: IObservable<Input<'Item, 'ItemId, 'ItemMsg>>)
     =
     let itemCache = ConcurrentDictionary<'ItemId, 'Item>()
 
-    // let getItem itemId =
-    //     match itemCache.TryGetValue itemId with
-    //     | true, item -> Ok item |> Observable.single
-    //     | false, _ ->
-    //         readItemOnDatabase itemId
-    //         |> Observable.map (
-    //             Result.bind (fun item ->
-    //                 match itemCache.TryAdd(itemId, item) with
-    //                 | true -> Ok item
-    //                 | false -> Error "Failed to add item to cache")
-    //         )
-    //     |> Observable.map (fun result -> itemId, result)
+    let getItem itemId =
+        match itemCache.TryGetValue itemId with
+        | true, item -> Ok item |> Observable.single
+        | false, _ ->
+            readItemOnDatabase itemId
+            |> Observable.map (
+                Result.bind (fun item ->
+                    match itemCache.TryAdd(itemId, item) with
+                    | true -> Ok item
+                    | false -> Error "Failed to add item to cache")
+            )
+        |> Observable.map (fun result -> itemId, result)
     
-    // let persistItemOnDatabase (itemId: 'ItemId) (result: Result<'Item, string>) =
-    //     match result with
-    //     | Error err -> (itemId, Error err) |> Observable.single
-    //     | Ok item ->
-    //         item
-    //         |> createOrUpdateItemOnDatabase
-    //         |> Observable.map (fun result ->
-    //             itemId,
-    //             result
-    //             |> Result.bind (fun databaseItem ->
-    //                 match itemCache.TryRemove itemId with
-    //                 | true, _ -> Ok databaseItem
-    //                 | false, _ -> Error "Failed to remove item from cache after persist"))
+    let persistItemOnDatabase (itemId: 'ItemId) (result: Result<'Item, string>) =
+        match result with
+        | Error err -> (itemId, Error err) |> Observable.single
+        | Ok item ->
+            item
+            |> createOrUpdateItemOnDatabase
+            |> Observable.map (fun result ->
+                itemId,
+                result
+                |> Result.bind (fun databaseItem ->
+                    match itemCache.TryRemove itemId with
+                    | true, _ -> Ok databaseItem
+                    | false, _ -> Error "Failed to remove item from cache after persist"))
 
     inputObservable
     |> Observable.groupByUntil
@@ -108,8 +108,7 @@ let obsCache
                  ))
                 (group |> Observable.throttle evictionDelay))
     |> Observable.bind (
-
-        Observable.map (fun (input: Input<'Item,'ItemId,'ItemMsg>) ->
+        Observable.map (fun input ->
             match input.CacheInput with
             | CreateItem(itemId, item) ->
                 (itemId,
@@ -172,8 +171,6 @@ let obsCache
             |> ignore
             
             outputObservable
-
-            
         )
 
 let createHelperFunctions
