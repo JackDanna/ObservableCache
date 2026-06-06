@@ -10,7 +10,7 @@ dotnet add package ObservableCache
 
 ## Overview
 
-ObservableCache sits between your application and your database. Operations flow in as an `IObservable<Input>`, items are processed sequentially per key, and persistence to the database is handled automatically on eviction. Each operation carries a `CorrelationId` so results can be matched back to the caller.
+ObservableCache sits between your application and your database. Operations flow in as an `IObservable<Input>`, items are processed concurrently across keys but sequentially per key. The persistence to the database is handled automatically on eviction. Each operation carries a `CorrelationId` so results can be matched back to the caller.
 
 ### How it works
 
@@ -94,19 +94,19 @@ let deleteResult = deleteItem id
 
 ### Types
 
-| Type                                   | Description                                                                                                       |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `CacheInput<'Item, 'ItemId, 'ItemMsg>` | Discriminated union of `CreateItem`, `ReadItem`, `UpdateItem`, `DeleteItem`                                       |
-| `Input<'Item, 'ItemId, 'ItemMsg>`      | A `CacheInput` with a `CorrelationId: Guid`                                                                       |
+| Type                                     | Description                                                                                                                    |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `CacheInput<'Item, 'ItemId, 'ItemMsg>` | Discriminated union of `CreateItem`, `ReadItem`, `UpdateItem`, `DeleteItem`                                            |
+| `Input<'Item, 'ItemId, 'ItemMsg>`      | A `CacheInput` with a `CorrelationId: Guid`                                                                                |
 | `CacheOutput<'ItemId, 'Item>`          | `CreateItemOnDB`, `ReadItemOnDB`, `UpdateItemOnDB`, `DeleteItemOnDB` — each carrying the `'ItemId` and a `Result` |
-| `Output<'ItemId, 'Item>`               | A `CacheOutput` with a `CorrelationId: Guid`                                                                      |
+| `Output<'ItemId, 'Item>`               | A `CacheOutput` with a `CorrelationId: Guid`                                                                               |
 
 ### Functions
 
-| Function                | Signature                                                                                                                                                                                                                                                                               |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `obsCache`              | `('Item -> Async<Result<'Item, string>>) -> ('ItemId -> Async<Result<'Item, string>>) -> ('ItemId -> Async<Result<unit, string>>) -> ('ItemMsg -> 'Item -> 'Item) -> TimeSpan -> IObservable<Input<'Item, 'ItemId, 'ItemMsg>> -> IObservable<Guid * CacheOutput<'ItemId, 'Item>>`       |
-| `createHelperFunctions` | Same first five parameters; returns typed `create`, `read`, `update`, and `delete` helper functions plus an `IObservable<Guid * CacheOutput<'ItemId, 'Item>>` |
+| Function                  | Signature                                                                                                                                                                                                                                                                           |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `obsCache`              | `('Item -> Async<Result<'Item, string>>) -> ('ItemId -> Async<Result<'Item, string>>) -> ('ItemId -> Async<Result<unit, string>>) -> ('ItemMsg -> 'Item -> 'Item) -> TimeSpan -> IObservable<Input<'Item, 'ItemId, 'ItemMsg>> -> IObservable<Guid * CacheOutput<'ItemId, 'Item>>` |
+| `createHelperFunctions` | Same first five parameters; returns typed `create`, `read`, `update`, and `delete` helper functions plus an `IObservable<Guid * CacheOutput<'ItemId, 'Item>>`                                                                                                             |
 
 ## Notes
 
