@@ -49,7 +49,7 @@ let temp
     observableOfInput
     |> AsyncSeq.ofObservableBuffered
     |> AsyncSeq.scanAsync
-        (fun (state: 'Item option, cacheOutput: Option<Guid * CacheOutput<'ItemId, 'Item>>) input ->
+        (fun (state: 'Item option, _) input ->
 
             match input.CacheInput with
             | CreateItem(itemId, item) ->
