@@ -35,7 +35,7 @@ let cacheInputToItemId =
     | DeleteItem itemId -> itemId
 
 let obsCache
-    (createOrUpdateItemOnDatabase: 'Item -> IObservable<Result<'Item, string>>)
+    (createOrUpdateItemOnDatabase: 'Item -> Async<Result<'Item, string>>)
     (readItemOnDatabase: 'ItemId -> Async<Result<'Item, string>>)
     (deleteItemOnDatabase: 'ItemId -> IObservable<Result<unit, string>>)
     (updateItem: 'ItemMsg -> 'Item -> 'Item)
@@ -49,6 +49,7 @@ let obsCache
         | Ok item ->
             item
             |> createOrUpdateItemOnDatabase
+            |> Observable.ofAsync
             |> Observable.map (fun result ->
                 itemId,
                 result
@@ -154,7 +155,7 @@ let obsCache
     )
 
 let createHelperFunctions
-    (createOrUpdateItemOnDatabase: 'Item -> IObservable<Result<'Item, string>>)
+    (createOrUpdateItemOnDatabase: 'Item -> Async<Result<'Item, string>>)
     (readItemOnDatabase: 'ItemId -> Async<Result<'Item, string>>)
     (deleteItemOnDatabase: 'ItemId -> IObservable<Result<unit, string>>)
     (updateItem: 'ItemMsg -> 'Item -> 'Item)

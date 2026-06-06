@@ -1,5 +1,7 @@
 #r "nuget: System.Reactive, 6.1.0"
 #r "nuget: FSharp.Control.Reactive, 6.1.2"
+#r "nuget: FsToolkit.ErrorHandling, 5.2.0"
+#r "nuget: FSharp.Control.AsyncSeq, 3.2.1"
 #load "ObservableCache.fs"
 
 open System
@@ -15,15 +17,15 @@ open FSharp.Control.Reactive
 let dbReadLatencyMs = 150
 let mutable dbReadCount = 0
 
-let readFromDb (itemId: string) : IObservable<Result<string, string>> =
+let readFromDb (itemId: string) : Async<Result<string, string>> =
     Interlocked.Increment(&dbReadCount) |> ignore
-    Observable.ofAsync (async {
+    async {
         do! Async.Sleep dbReadLatencyMs
         return Ok $"db-value-for-{itemId}"
-    })
+    }
 
-let saveToDb (item: string) : IObservable<Result<string, string>> =
-    Observable.single (Ok item)
+let saveToDb (item: string) : Async<Result<string, string>> =
+    async.Return (Ok item)
 
 let deleteFromDb (_itemId: string) : IObservable<Result<unit, string>> =
     Observable.single (Ok ())
@@ -35,7 +37,7 @@ let applyMsg (msg: string) (item: string) : string =
 // Build the cache
 // ---------------------------------------------------------------------------
 
-let evictionDelay = TimeSpan.FromSeconds 5.0
+let evictionDelay = TimeSpan.FromMilliseconds 500.0
 
 let create, read, update, delete, _output =
     ObservableCache.createHelperFunctions
