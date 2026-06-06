@@ -30,7 +30,7 @@ let saveToDb (item: string) : Async<Result<string, string>> =
 let deleteFromDb (_itemId: string) : Async<Result<unit, string>> =
     async.Return (Ok ())
 
-let applyMsg (msg: string) (item: string) : string =
+let update (msg: string) (item: string) : string =
     $"{item}+{msg}"
 
 // ---------------------------------------------------------------------------
@@ -39,12 +39,12 @@ let applyMsg (msg: string) (item: string) : string =
 
 let evictionDelay = TimeSpan.FromMilliseconds 500.0
 
-let create, read, update, delete, _output =
+let create, read, updateDispatch, delete, _output =
     ObservableCache.createHelperFunctions
         saveToDb
         readFromDb
         deleteFromDb
-        applyMsg
+        update
         evictionDelay
 
 // ---------------------------------------------------------------------------

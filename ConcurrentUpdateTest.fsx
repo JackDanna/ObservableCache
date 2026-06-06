@@ -36,21 +36,21 @@ let deleteFromDb (_itemId: string) : Async<Result<unit, string>> =
     async.Return (Ok ())
 
 // Each update message appends "+N" so we can reconstruct the expected final value.
-let applyMsg (msg: string) (item: string) : string =
+let update (msg: string) (item: string) : string =
     $"{item}+{msg}"
 
 // ---------------------------------------------------------------------------
 // Build the cache
 // ---------------------------------------------------------------------------
 
-let evictionDelay = TimeSpan.FromSeconds 10.0
+let evictionDelay = TimeSpan.FromSeconds 30.0
 
-let create, read, update, delete, _output =
+let create, read, updateDispatch, delete, _output =
     ObservableCache.createHelperFunctions
         saveToDb
         readFromDb
         deleteFromDb
-        applyMsg
+        update
         evictionDelay
 
 // ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ match seedResult with
 let tasks =
     Array.init concurrentUpdaters (fun i ->
         task {
-            let! result = update (testKey, string i)
+            let! result = updateDispatch (testKey, string i)
             return (i, result)
         })
 
