@@ -13,10 +13,9 @@ type CacheInput<'Item, 'ItemId, 'ItemMsg> =
     | UpdateItem of 'ItemId * 'ItemMsg
     | DeleteItem of 'ItemId
 
-type Input<'Item, 'ItemId, 'ItemMsg> = {
-    CorrelationId: Guid
-    CacheInput: CacheInput<'Item, 'ItemId, 'ItemMsg>
-}
+type Input<'Item, 'ItemId, 'ItemMsg> =
+    { CorrelationId: Guid
+      CacheInput: CacheInput<'Item, 'ItemId, 'ItemMsg> }
 
 type CacheOutput<'ItemId, 'Item> =
     | CreateItemOnDB of 'ItemId * Result<'Item, string>
@@ -24,10 +23,9 @@ type CacheOutput<'ItemId, 'Item> =
     | UpdateItemOnDB of 'ItemId * Result<'Item, string>
     | DeleteItemOnDB of 'ItemId * Result<unit, string>
 
-type Output<'ItemId, 'Item> = {
-    CorrelationId: Guid
-    CacheOutput: CacheOutput<'ItemId, 'Item>
-}
+type Output<'ItemId, 'Item> =
+    { CorrelationId: Guid
+      CacheOutput: CacheOutput<'ItemId, 'Item> }
 
 let cacheInputToItemId =
     function
@@ -38,69 +36,57 @@ let cacheInputToItemId =
 
 let temp2 state input (readItemOnDatabase: 'ItemId -> Async<Result<'Item, string>>) func =
     match state with
-    | None -> 
-        input.CacheInput
-        |> cacheInputToItemId
-        |> readItemOnDatabase
+    | None -> input.CacheInput |> cacheInputToItemId |> readItemOnDatabase
     | Some item -> Ok item |> async.Return
     |> AsyncResult.map func
 
 
-let temp (observableOfInput: IObservable<Input<'Item, 'ItemId, 'ItemMsg>>) (readItemOnDatabase: 'ItemId -> Async<Result<'Item, string>>) (updateItem: 'ItemMsg -> 'Item -> 'Item) =
+let temp
+    (observableOfInput: IObservable<Input<'Item, 'ItemId, 'ItemMsg>>)
+    (readItemOnDatabase: 'ItemId -> Async<Result<'Item, string>>)
+    (updateItem: 'ItemMsg -> 'Item -> 'Item)
+    =
     observableOfInput
     |> AsyncSeq.ofObservableBuffered
-    |> AsyncSeq.scanAsync 
-        (
-            fun (state: 'Item option, cacheOutput:Option<Guid * CacheOutput<'ItemId, 'Item>>) input ->
+    |> AsyncSeq.scanAsync
+        (fun (state: 'Item option, cacheOutput: Option<Guid * CacheOutput<'ItemId, 'Item>>) input ->
 
-                match input.CacheInput with
-                | CreateItem(itemId, item) ->
-                    match state with
-                    | None ->
-                        Some item, CreateItemOnDB(itemId, Ok item)
-                    | Some _ -> 
-                        Some item, CreateItemOnDB(itemId, Error "Item already exists in cache")
-                    |> async.Return
-                    
-                | ReadItem itemId ->
-                    match state with
-                    | None -> 
-                        input.CacheInput
-                        |> cacheInputToItemId
-                        |> readItemOnDatabase
-                    | Some item -> Ok item |> async.Return
-                    |> Async.map (fun result ->
-                        match result with
-                        | Ok item -> Some item, ReadItemOnDB(itemId, Ok item)
-                        | Error err -> None, ReadItemOnDB(itemId, Error err)
-                    )
-                    
-                | UpdateItem(itemId, itemMsg) ->
-                    match state with
-                    | None -> 
-                        input.CacheInput
-                        |> cacheInputToItemId
-                        |> readItemOnDatabase
-                    | Some item -> Ok item |> async.Return
-                    |> Async.map (fun result ->
-                        match result with
-                        | Ok item ->
-                            let updatedItem = updateItem itemMsg item
+            match input.CacheInput with
+            | CreateItem(itemId, item) ->
+                match state with
+                | None -> Some item, CreateItemOnDB(itemId, Ok item)
+                | Some _ -> Some item, CreateItemOnDB(itemId, Error "Item already exists in cache")
+                |> async.Return
 
-                            Some updatedItem, UpdateItemOnDB(itemId, Ok updatedItem)
-                        | Error err -> None, UpdateItemOnDB(itemId, Error err)
-                    )
+            | ReadItem itemId ->
+                match state with
+                | None -> input.CacheInput |> cacheInputToItemId |> readItemOnDatabase
+                | Some item -> Ok item |> async.Return
+                |> Async.map (fun result ->
+                    match result with
+                    | Ok item -> Some item, ReadItemOnDB(itemId, Ok item)
+                    | Error err -> None, ReadItemOnDB(itemId, Error err))
 
-                | DeleteItem itemId ->
-                    (None, DeleteItemOnDB(itemId, Ok()))
-                    |> async.Return
-                    
-                |> Async.map (fun (itemOption, co) -> itemOption, Some (input.CorrelationId, co) )
+            | UpdateItem(itemId, itemMsg) ->
+                match state with
+                | None -> input.CacheInput |> cacheInputToItemId |> readItemOnDatabase
+                | Some item -> Ok item |> async.Return
+                |> Async.map (fun result ->
+                    match result with
+                    | Ok item ->
+                        let updatedItem = updateItem itemMsg item
+
+                        Some updatedItem, UpdateItemOnDB(itemId, Ok updatedItem)
+                    | Error err -> None, UpdateItemOnDB(itemId, Error err))
+
+            | DeleteItem itemId -> (None, DeleteItemOnDB(itemId, Ok())) |> async.Return
+
+            |> Async.map (fun (itemOption, co) -> itemOption, Some(input.CorrelationId, co))
 
         )
-        (None,None)
+        (None, None)
     |> AsyncSeq.toObservable
-    |> Observable.choose (fun ( _, processorOutputs) -> processorOutputs)
+    |> Observable.choose (fun (_, processorOutputs) -> processorOutputs)
 
 let obsCache2
     (createOrUpdateItemOnDatabase: 'Item -> Async<Result<'Item, string>>)
@@ -114,7 +100,7 @@ let obsCache2
     inputObservable
     |> Observable.groupByUntil
         (_.CacheInput
-          >> function
+         >> function
              | CreateItem(itemId, _) -> itemId
              | ReadItem itemId -> itemId
              | UpdateItem(itemId, _) -> itemId
@@ -130,62 +116,49 @@ let obsCache2
                  ))
                 (group |> Observable.throttle evictionDelay))
     |> Observable.bind (
-            AsyncSeq.ofObservableBuffered
-            >> AsyncSeq.scanAsync 
-                (
-                    fun (state: 'Item option, cacheOutput:Option<Guid * CacheOutput<'ItemId, 'Item>>) input ->
+        AsyncSeq.ofObservableBuffered
+        >> AsyncSeq.scanAsync
+            (fun (state: 'Item option, cacheOutput: Option<Guid * CacheOutput<'ItemId, 'Item>>) input ->
 
-                        match input.CacheInput with
-                        | CreateItem(itemId, item) ->
-                            match state with
-                            | None ->
-                                Some item, CreateItemOnDB(itemId, Ok item)
-                            | Some _ -> 
-                                Some item, CreateItemOnDB(itemId, Error "Item already exists in cache")
-                            |> async.Return
-                            
-                        | ReadItem itemId ->
-                            match state with
-                            | None -> 
-                                input.CacheInput
-                                |> cacheInputToItemId
-                                |> readItemOnDatabase
-                            | Some item -> Ok item |> async.Return
-                            |> Async.map (fun result ->
-                                match result with
-                                | Ok item -> Some item, ReadItemOnDB(itemId, Ok item)
-                                | Error err -> None, ReadItemOnDB(itemId, Error err)
-                            )
-                            
-                        | UpdateItem(itemId, itemMsg) ->
-                            match state with
-                            | None -> 
-                                input.CacheInput
-                                |> cacheInputToItemId
-                                |> readItemOnDatabase
-                            | Some item -> Ok item |> async.Return
-                            |> Async.map (fun result ->
-                                match result with
-                                | Ok item ->
-                                    let updatedItem = updateItem itemMsg item
+                match input.CacheInput with
+                | CreateItem(itemId, item) ->
+                    match state with
+                    | None -> Some item, CreateItemOnDB(itemId, Ok item)
+                    | Some _ -> Some item, CreateItemOnDB(itemId, Error "Item already exists in cache")
+                    |> async.Return
 
-                                    Some updatedItem, UpdateItemOnDB(itemId, Ok updatedItem)
-                                | Error err -> None, UpdateItemOnDB(itemId, Error err)
-                            )
+                | ReadItem itemId ->
+                    match state with
+                    | None -> input.CacheInput |> cacheInputToItemId |> readItemOnDatabase
+                    | Some item -> Ok item |> async.Return
+                    |> Async.map (fun result ->
+                        match result with
+                        | Ok item -> Some item, ReadItemOnDB(itemId, Ok item)
+                        | Error err -> None, ReadItemOnDB(itemId, Error err))
 
-                        | DeleteItem itemId ->
-                            (None, DeleteItemOnDB(itemId, Ok()))
-                            |> async.Return
-                            
-                        |> Async.map (fun (itemOption, co) -> itemOption, Some (input.CorrelationId, co) )
+                | UpdateItem(itemId, itemMsg) ->
+                    match state with
+                    | None -> input.CacheInput |> cacheInputToItemId |> readItemOnDatabase
+                    | Some item -> Ok item |> async.Return
+                    |> Async.map (fun result ->
+                        match result with
+                        | Ok item ->
+                            let updatedItem = updateItem itemMsg item
 
-                )
-                (None,None)
-            >> AsyncSeq.toObservable
-            >> Observable.choose (fun ( _, processorOutputs) -> processorOutputs)
+                            Some updatedItem, UpdateItemOnDB(itemId, Ok updatedItem)
+                        | Error err -> None, UpdateItemOnDB(itemId, Error err))
+
+                | DeleteItem itemId -> (None, DeleteItemOnDB(itemId, Ok())) |> async.Return
+
+                |> Async.map (fun (itemOption, co) -> itemOption, Some(input.CorrelationId, co))
+
+            )
+            (None, None)
+        >> AsyncSeq.toObservable
+        >> Observable.choose (fun (_, processorOutputs) -> processorOutputs)
 
 
-        )
+    )
 
 let obsCache
     (createOrUpdateItemOnDatabase: 'Item -> IObservable<Result<'Item, string>>)
@@ -209,7 +182,7 @@ let obsCache
                     | false -> Error "Failed to add item to cache")
             )
         |> Observable.map (fun result -> itemId, result)
-    
+
     let persistItemOnDatabase (itemId: 'ItemId) (result: Result<'Item, string>) =
         match result with
         | Error err -> (itemId, Error err) |> Observable.single
@@ -247,9 +220,9 @@ let obsCache
             match input.CacheInput with
             | CreateItem(itemId, item) ->
                 (itemId,
-                    match itemCache.TryAdd(itemId, item) with
-                    | true -> Ok item
-                    | false -> Error "Item already exists in cache")
+                 match itemCache.TryAdd(itemId, item) with
+                 | true -> Ok item
+                 | false -> Error "Item already exists in cache")
                 |> Observable.single
                 |> Observable.map CreateItemOnDB
             | ReadItem itemId -> getItem itemId |> Observable.map ReadItemOnDB
@@ -267,9 +240,9 @@ let obsCache
                 |> Observable.map UpdateItemOnDB
             | DeleteItem itemId ->
                 (itemId,
-                    match itemCache.TryRemove itemId with
-                    | true, _ -> Ok()
-                    | false, _ -> Ok())
+                 match itemCache.TryRemove itemId with
+                 | true, _ -> Ok()
+                 | false, _ -> Ok())
                 |> Observable.single
                 |> Observable.map DeleteItemOnDB
             |> Observable.map (fun co -> input.CorrelationId, co))
@@ -283,8 +256,7 @@ let obsCache
                 match cacheOutput with
                 | CreateItemOnDB(itemId, result) ->
                     persistItemOnDatabase itemId result |> Observable.map CreateItemOnDB
-                | ReadItemOnDB(itemId, result) ->
-                    persistItemOnDatabase itemId result |> Observable.map ReadItemOnDB
+                | ReadItemOnDB(itemId, result) -> persistItemOnDatabase itemId result |> Observable.map ReadItemOnDB
                 | UpdateItemOnDB(itemId, result) ->
                     persistItemOnDatabase itemId result |> Observable.map UpdateItemOnDB
                 | DeleteItemOnDB(itemId, result) ->
@@ -298,15 +270,14 @@ let obsCache
                             | Ok() -> Ok()
                             | Error err -> Error err)
                     |> Observable.map DeleteItemOnDB
-                |> Observable.map (fun co -> {
-                    CorrelationId = correlationId
-                    CacheOutput = co
-                }))
+                |> Observable.map (fun co ->
+                    { CorrelationId = correlationId
+                      CacheOutput = co }))
             |> Observable.subscribe (fun output -> ())
             |> ignore
-            
+
             outputObservable
-        )
+    )
 
 let createHelperFunctions
     (createOrUpdateItemOnDatabase: 'Item -> IObservable<Result<'Item, string>>)
@@ -318,8 +289,7 @@ let createHelperFunctions
     let rawSubject =
         new System.Reactive.Subjects.Subject<Input<'Item, 'ItemId, 'ItemMsg>>()
 
-    let inputSubject =
-        System.Reactive.Subjects.Subject.Synchronize rawSubject 
+    let inputSubject = System.Reactive.Subjects.Subject.Synchronize rawSubject
 
     let outputObservable =
         obsCache
@@ -356,10 +326,9 @@ let createHelperFunctions
         let tcs = System.Threading.Tasks.TaskCompletionSource<Result<'Item, string>>()
         pendingItemRequests[correlationId] <- tcs
 
-        inputSubject.OnNext {
-            CorrelationId = correlationId
-            CacheInput = msg
-        }
+        inputSubject.OnNext
+            { CorrelationId = correlationId
+              CacheInput = msg }
 
         tcs.Task
 
@@ -368,10 +337,9 @@ let createHelperFunctions
         let tcs = System.Threading.Tasks.TaskCompletionSource<Result<unit, string>>()
         pendingDeleteRequests[correlationId] <- tcs
 
-        inputSubject.OnNext {
-            CorrelationId = correlationId
-            CacheInput = msg
-        }
+        inputSubject.OnNext
+            { CorrelationId = correlationId
+              CacheInput = msg }
 
         tcs.Task
 
