@@ -35,13 +35,24 @@ let cacheInputToItemId =
     | DeleteItem itemId -> itemId
 
 let obsCache2
-    (createOrUpdateItemOnDatabase: 'Item -> Async<Result<'Item, string>>)
+    (createOrUpdateItemOnDatabase: 'Item -> IObservable<Result<'Item, string>>)
     (readItemOnDatabase: 'ItemId -> Async<Result<'Item, string>>)
-    (deleteItemOnDatabase: 'ItemId -> Async<Result<unit, string>>)
+    (deleteItemOnDatabase: 'ItemId -> IObservable<Result<unit, string>>)
     (updateItem: 'ItemMsg -> 'Item -> 'Item)
     (evictionDelay: TimeSpan)
     (inputObservable: IObservable<Input<'Item, 'ItemId, 'ItemMsg>>)
     =
+
+    let persistItemOnDatabase (itemId: 'ItemId) (result: Result<'Item, string>) =
+        match result with
+        | Error err -> (itemId, Error err) |> Observable.single
+        | Ok item ->
+            item
+            |> createOrUpdateItemOnDatabase
+            |> Observable.map (fun result ->
+                itemId,
+                result
+            )
 
     inputObservable
     |> Observable.groupByUntil
@@ -102,7 +113,34 @@ let obsCache2
             (None, None)
         >> AsyncSeq.toObservable
         >> Observable.choose (fun (_, processorOutputs) -> processorOutputs)
+        >> fun outputObservable ->
+            outputObservable
+            |> Observable.takeLast 1
+            |> Observable.bind (fun (correlationId, cacheOutput) ->
+                match cacheOutput with
+                | CreateItemOnDB(itemId, result) ->
+                    persistItemOnDatabase itemId result |> Observable.map CreateItemOnDB
+                | ReadItemOnDB(itemId, result) -> persistItemOnDatabase itemId result |> Observable.map ReadItemOnDB
+                | UpdateItemOnDB(itemId, result) ->
+                    persistItemOnDatabase itemId result |> Observable.map UpdateItemOnDB
+                | DeleteItemOnDB(itemId, result) ->
+                    match result with
+                    | Error err -> (itemId, Error err) |> Observable.single
+                    | Ok() ->
+                        deleteItemOnDatabase itemId
+                        |> Observable.map (fun result ->
+                            itemId,
+                            match result with
+                            | Ok() -> Ok()
+                            | Error err -> Error err)
+                    |> Observable.map DeleteItemOnDB
+                |> Observable.map (fun co ->
+                    { CorrelationId = correlationId
+                      CacheOutput = co }))
+            |> Observable.subscribe (fun output -> ())
+            |> ignore
 
+            outputObservable
 
     )
 
