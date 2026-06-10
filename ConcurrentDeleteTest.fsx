@@ -49,10 +49,7 @@ let create, read, updateDispatch, delete, _output =
 // ---------------------------------------------------------------------------
 
 let seed key =
-    create (key, $"value-for-{key}")
-    |> Async.AwaitTask
-    |> Async.RunSynchronously
-    |> ignore
+    create (key, $"value-for-{key}") |> Async.RunSynchronously |> ignore
 
 // ---------------------------------------------------------------------------
 // Test 1: 50 concurrent deletes on DIFFERENT keys (all should succeed)
@@ -173,8 +170,7 @@ printfn "--- Test 3: read after delete should fetch from DB ---"
 let readAfterDeleteKey = "read-after-delete-key"
 seed readAfterDeleteKey
 
-let deleteResult =
-    delete readAfterDeleteKey |> Async.AwaitTask |> Async.RunSynchronously
+let deleteResult = delete readAfterDeleteKey |> Async.RunSynchronously
 
 match deleteResult with
 | Error err -> printfn "  Delete failed: %s" err
@@ -184,7 +180,7 @@ match deleteResult with
     let mutable dbReadCount = 0
 
     let readResult =
-        read readAfterDeleteKey |> Async.AwaitTask |> Async.RunSynchronously
+        read readAfterDeleteKey |> Async.RunSynchronously
 
     match readResult with
     | Ok v -> printfn "  Read returned: %s" v

@@ -63,8 +63,7 @@ printfn "  DB write latency  : %d ms" dbWriteLatencyMs
 printfn ""
 
 // Seed the cache with the item first so updates don't also race on a cold read.
-let seedResult =
-    create (testKey, "base") |> Async.AwaitTask |> Async.RunSynchronously
+let seedResult = create (testKey, "base") |> Async.RunSynchronously
 
 match seedResult with
 | Error err -> failwithf "Failed to seed item: %s" err
