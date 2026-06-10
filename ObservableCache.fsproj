@@ -27,7 +27,7 @@
 
   <ItemGroup>
     <PackageReference Include="FsToolkit.ErrorHandling" Version="5.2.0" />
-    <PackageReference Include="FSharp.Control.AsyncSeq" Version="3.2.1" />
+    <PackageReference Include="FSharp.Control.AsyncSeq" Version="4.15.0" />
     <PackageReference Include="FSharp.Control.Reactive" Version="6.1.2" />
     <PackageReference Include="System.Reactive" Version="6.1.0" />
   </ItemGroup>
