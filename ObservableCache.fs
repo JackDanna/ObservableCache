@@ -198,15 +198,33 @@ let createHelperFunctions
     |> ignore
 
     let dispatch msg =
-        Async.FromContinuations(fun (onSuccess, _, _) ->
-            let correlationId = Guid.NewGuid()
-            pendingItemRequests[correlationId] <- onSuccess
-            inputSubject.OnNext { CorrelationId = correlationId; CacheInput = msg })
+        async {
+            let! ct = Async.CancellationToken
+            return!
+                Async.FromContinuations(fun (onSuccess, _, onCancel) ->
+                    let correlationId = Guid.NewGuid()
+                    pendingItemRequests[correlationId] <- onSuccess
+                    ct.Register(fun () ->
+                        match pendingItemRequests.TryRemove correlationId with
+                        | true, _ -> onCancel (OperationCanceledException ct)
+                        | false, _ -> ())
+                    |> ignore
+                    inputSubject.OnNext { CorrelationId = correlationId; CacheInput = msg })
+        }
 
     let dispatchDelete msg =
-        Async.FromContinuations(fun (onSuccess, _, _) ->
-            let correlationId = Guid.NewGuid()
-            pendingDeleteRequests[correlationId] <- onSuccess
-            inputSubject.OnNext { CorrelationId = correlationId; CacheInput = msg })
+        async {
+            let! ct = Async.CancellationToken
+            return!
+                Async.FromContinuations(fun (onSuccess, _, onCancel) ->
+                    let correlationId = Guid.NewGuid()
+                    pendingDeleteRequests[correlationId] <- onSuccess
+                    ct.Register(fun () ->
+                        match pendingDeleteRequests.TryRemove correlationId with
+                        | true, _ -> onCancel (OperationCanceledException ct)
+                        | false, _ -> ())
+                    |> ignore
+                    inputSubject.OnNext { CorrelationId = correlationId; CacheInput = msg })
+        }
 
     CreateItem >> dispatch, ReadItem >> dispatch, UpdateItem >> dispatch, DeleteItem >> dispatchDelete, outputObservable
