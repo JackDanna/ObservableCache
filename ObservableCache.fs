@@ -7,34 +7,6 @@ open FSharp.Control.Reactive
 open FSharp.Control
 open FsToolkit.ErrorHandling
 
-type AsyncResultCell<'T>() =
-    let mutable result: 'T option = None
-    let mutable continuations = []
-    let syncRoot = obj ()
-
-    member _.RegisterResult(value: 'T) =
-        let toNotify =
-            lock syncRoot (fun () ->
-                result <- Some value
-                let cs = continuations
-                continuations <- []
-                cs)
-        for (onSuccess, _, _) in toNotify do
-            onSuccess value
-
-    member _.AsyncResult =
-        Async.FromContinuations(fun (onSuccess, onError, onCancel) ->
-            let immediate =
-                lock syncRoot (fun () ->
-                    match result with
-                    | Some v -> Some v
-                    | None ->
-                        continuations <- (onSuccess, onError, onCancel) :: continuations
-                        None)
-            match immediate with
-            | Some v -> onSuccess v
-            | None -> ())
-
 type CacheInput<'Item, 'ItemId, 'ItemMsg> =
     | CreateItem of 'ItemId * 'Item
     | ReadItem of 'ItemId
@@ -205,10 +177,10 @@ let createHelperFunctions
             rawSubject
 
     let pendingItemRequests =
-        ConcurrentDictionary<Guid, AsyncResultCell<Result<'Item, string>>>()
+        ConcurrentDictionary<Guid, Result<'Item, string> -> unit>()
 
     let pendingDeleteRequests =
-        ConcurrentDictionary<Guid, AsyncResultCell<Result<unit, string>>>()
+        ConcurrentDictionary<Guid, Result<unit, string> -> unit>()
 
     outputObservable
     |> Observable.subscribe (fun (correlationGuid, output) ->
@@ -217,34 +189,24 @@ let createHelperFunctions
         | ReadItemOnDB(_, result)
         | UpdateItemOnDB(_, result) ->
             match pendingItemRequests.TryRemove correlationGuid with
-            | true, cell -> cell.RegisterResult result
+            | true, onSuccess -> onSuccess result
             | false, _ -> ()
         | DeleteItemOnDB(_, result) ->
             match pendingDeleteRequests.TryRemove correlationGuid with
-            | true, cell -> cell.RegisterResult result
+            | true, onSuccess -> onSuccess result
             | false, _ -> ())
     |> ignore
 
     let dispatch msg =
-        let correlationId = Guid.NewGuid()
-        let cell = AsyncResultCell<Result<'Item, string>>()
-        pendingItemRequests[correlationId] <- cell
-
-        inputSubject.OnNext
-            { CorrelationId = correlationId
-              CacheInput = msg }
-
-        cell.AsyncResult
+        Async.FromContinuations(fun (onSuccess, _, _) ->
+            let correlationId = Guid.NewGuid()
+            pendingItemRequests[correlationId] <- onSuccess
+            inputSubject.OnNext { CorrelationId = correlationId; CacheInput = msg })
 
     let dispatchDelete msg =
-        let correlationId = Guid.NewGuid()
-        let cell = AsyncResultCell<Result<unit, string>>()
-        pendingDeleteRequests[correlationId] <- cell
-
-        inputSubject.OnNext
-            { CorrelationId = correlationId
-              CacheInput = msg }
-
-        cell.AsyncResult
+        Async.FromContinuations(fun (onSuccess, _, _) ->
+            let correlationId = Guid.NewGuid()
+            pendingDeleteRequests[correlationId] <- onSuccess
+            inputSubject.OnNext { CorrelationId = correlationId; CacheInput = msg })
 
     CreateItem >> dispatch, ReadItem >> dispatch, UpdateItem >> dispatch, DeleteItem >> dispatchDelete, outputObservable
