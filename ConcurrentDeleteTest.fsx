@@ -13,7 +13,7 @@ open FSharp.Control.Reactive
 // Simulated "database"
 // ---------------------------------------------------------------------------
 
-let dbReadLatencyMs   = 100
+let dbReadLatencyMs = 100
 let dbDeleteLatencyMs = 100
 let mutable dbDeleteCount = 0
 
@@ -23,14 +23,14 @@ let readFromDb (itemId: string) : Async<Result<string, string>> =
         return Ok $"value-for-{itemId}"
     }
 
-let saveToDb (item: string) : Async<Result<string, string>> =
-    async.Return (Ok item)
+let saveToDb (item: string) : Async<Result<string, string>> = async.Return(Ok item)
 
 let deleteFromDb (_itemId: string) : Async<Result<unit, string>> =
     Interlocked.Increment(&dbDeleteCount) |> ignore
+
     async {
         do! Async.Sleep dbDeleteLatencyMs
-        return Ok ()
+        return Ok()
     }
 
 let update (msg: string) (item: string) : string = $"{item}+{msg}"
@@ -42,19 +42,17 @@ let update (msg: string) (item: string) : string = $"{item}+{msg}"
 let evictionDelay = TimeSpan.FromSeconds 10.0
 
 let create, read, updateDispatch, delete, _output =
-    ObservableCache.createHelperFunctions
-        saveToDb
-        readFromDb
-        deleteFromDb
-        update
-        evictionDelay
+    ObservableCache.createHelperFunctions saveToDb readFromDb deleteFromDb update evictionDelay
 
 // ---------------------------------------------------------------------------
 // Helper
 // ---------------------------------------------------------------------------
 
 let seed key =
-    create (key, $"value-for-{key}") |> Async.AwaitTask |> Async.RunSynchronously |> ignore
+    create (key, $"value-for-{key}")
+    |> Async.AwaitTask
+    |> Async.RunSynchronously
+    |> ignore
 
 // ---------------------------------------------------------------------------
 // Test 1: 50 concurrent deletes on DIFFERENT keys (all should succeed)
@@ -79,16 +77,34 @@ let uniqueKeyTasks =
             return (i, result)
         })
 
-let uniqueResults = Task.WhenAll(uniqueKeyTasks) |> Async.AwaitTask |> Async.RunSynchronously
+let uniqueResults =
+    Task.WhenAll(uniqueKeyTasks) |> Async.AwaitTask |> Async.RunSynchronously
 
-let uniqueSuccesses = uniqueResults |> Array.filter (snd >> function Ok _ -> true  | _ -> false)
-let uniqueFailures  = uniqueResults |> Array.filter (snd >> function Error _ -> true | _ -> false)
+let uniqueSuccesses =
+    uniqueResults
+    |> Array.filter (
+        snd
+        >> function
+            | Ok _ -> true
+            | _ -> false
+    )
+
+let uniqueFailures =
+    uniqueResults
+    |> Array.filter (
+        snd
+        >> function
+            | Error _ -> true
+            | _ -> false
+    )
 
 printfn "  Total    : %d" uniqueResults.Length
 printfn "  Successes: %d (expected %d)" uniqueSuccesses.Length concurrentDeletes
 printfn "  Failures : %d (expected 0)" uniqueFailures.Length
 
-let test1Pass = uniqueSuccesses.Length = concurrentDeletes && uniqueFailures.Length = 0
+let test1Pass =
+    uniqueSuccesses.Length = concurrentDeletes && uniqueFailures.Length = 0
+
 printfn "  Result   : %s" (if test1Pass then "PASS" else "FAIL")
 printfn ""
 
@@ -110,10 +126,26 @@ let sameKeyTasks =
             return (i, result)
         })
 
-let sameKeyResults = Task.WhenAll(sameKeyTasks) |> Async.AwaitTask |> Async.RunSynchronously
+let sameKeyResults =
+    Task.WhenAll(sameKeyTasks) |> Async.AwaitTask |> Async.RunSynchronously
 
-let sameKeySuccesses = sameKeyResults |> Array.filter (snd >> function Ok _ -> true  | _ -> false)
-let sameKeyFailures  = sameKeyResults |> Array.filter (snd >> function Error _ -> true | _ -> false)
+let sameKeySuccesses =
+    sameKeyResults
+    |> Array.filter (
+        snd
+        >> function
+            | Ok _ -> true
+            | _ -> false
+    )
+
+let sameKeyFailures =
+    sameKeyResults
+    |> Array.filter (
+        snd
+        >> function
+            | Error _ -> true
+            | _ -> false
+    )
 
 printfn "  Total    : %d" sameKeyResults.Length
 printfn "  Successes: %d (expected %d)" sameKeySuccesses.Length concurrentDeletes
@@ -122,7 +154,12 @@ printfn "  DB deletes: %d (writes happen on eviction after group terminates)" db
 
 if sameKeyFailures.Length > 0 then
     sameKeyFailures
-    |> Array.map (snd >> function Error e -> e | Ok _ -> "")
+    |> Array.map (
+        snd
+        >> function
+            | Error e -> e
+            | Ok _ -> ""
+    )
     |> Array.distinct
     |> Array.iter (printfn "  Error: %s")
 
@@ -141,21 +178,33 @@ let deleteResult =
 
 match deleteResult with
 | Error err -> printfn "  Delete failed: %s" err
-| Ok () ->
+| Ok() ->
     // A short pause so the group terminates and the key is fully evicted.
     System.Threading.Thread.Sleep 500
     let mutable dbReadCount = 0
+
     let readResult =
         read readAfterDeleteKey |> Async.AwaitTask |> Async.RunSynchronously
+
     match readResult with
-    | Ok v  -> printfn "  Read returned: %s" v
+    | Ok v -> printfn "  Read returned: %s" v
     | Error e -> printfn "  Read error: %s" e
 
 let test2Pass = sameKeySuccesses.Length = concurrentDeletes
-let test3Pass = match deleteResult with Ok () -> true | _ -> false
+
+let test3Pass =
+    match deleteResult with
+    | Ok() -> true
+    | _ -> false
 
 printfn ""
 printfn "  Test 2 result: %s" (if test2Pass then "PASS" else "FAIL")
 printfn "  Test 3 result: %s" (if test3Pass then "PASS" else "FAIL")
 printfn ""
-printfn "Overall: %s" (if test1Pass && test2Pass && test3Pass then "PASS" else "FAIL")
+
+printfn
+    "Overall: %s"
+    (if test1Pass && test2Pass && test3Pass then
+         "PASS"
+     else
+         "FAIL")

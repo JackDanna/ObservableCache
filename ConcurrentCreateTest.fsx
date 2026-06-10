@@ -18,16 +18,15 @@ let mutable dbWriteCount = 0
 
 let saveToDb (item: string) : Async<Result<string, string>> =
     Interlocked.Increment(&dbWriteCount) |> ignore
+
     async {
         do! Async.Sleep dbWriteLatencyMs
         return Ok item
     }
 
-let readFromDb (_itemId: string) : Async<Result<string, string>> =
-    async.Return (Error "item not found")
+let readFromDb (_itemId: string) : Async<Result<string, string>> = async.Return(Error "item not found")
 
-let deleteFromDb (_itemId: string) : Async<Result<unit, string>> =
-    async.Return (Ok ())
+let deleteFromDb (_itemId: string) : Async<Result<unit, string>> = async.Return(Ok())
 
 let update (msg: string) (item: string) : string = $"{item}+{msg}"
 
@@ -38,12 +37,7 @@ let update (msg: string) (item: string) : string = $"{item}+{msg}"
 let evictionDelay = TimeSpan.FromSeconds 10.0
 
 let create, read, updateDispatch, delete, _output =
-    ObservableCache.createHelperFunctions
-        saveToDb
-        readFromDb
-        deleteFromDb
-        update
-        evictionDelay
+    ObservableCache.createHelperFunctions saveToDb readFromDb deleteFromDb update evictionDelay
 
 // ---------------------------------------------------------------------------
 // Test 1: 50 concurrent creates on DIFFERENT keys (all should succeed)
@@ -65,16 +59,34 @@ let uniqueKeyTasks =
             return (i, result)
         })
 
-let uniqueResults = Task.WhenAll(uniqueKeyTasks) |> Async.AwaitTask |> Async.RunSynchronously
+let uniqueResults =
+    Task.WhenAll(uniqueKeyTasks) |> Async.AwaitTask |> Async.RunSynchronously
 
-let uniqueSuccesses = uniqueResults |> Array.filter (snd >> function Ok _ -> true  | _ -> false)
-let uniqueFailures  = uniqueResults |> Array.filter (snd >> function Error _ -> true | _ -> false)
+let uniqueSuccesses =
+    uniqueResults
+    |> Array.filter (
+        snd
+        >> function
+            | Ok _ -> true
+            | _ -> false
+    )
+
+let uniqueFailures =
+    uniqueResults
+    |> Array.filter (
+        snd
+        >> function
+            | Error _ -> true
+            | _ -> false
+    )
 
 printfn "  Total    : %d" uniqueResults.Length
 printfn "  Successes: %d (expected %d)" uniqueSuccesses.Length concurrentCreates
 printfn "  Failures : %d (expected 0)" uniqueFailures.Length
 
-let test1Pass = uniqueSuccesses.Length = concurrentCreates && uniqueFailures.Length = 0
+let test1Pass =
+    uniqueSuccesses.Length = concurrentCreates && uniqueFailures.Length = 0
+
 printfn "  Result   : %s" (if test1Pass then "PASS" else "FAIL")
 printfn ""
 
@@ -94,10 +106,26 @@ let sameKeyTasks =
             return (i, result)
         })
 
-let sameKeyResults = Task.WhenAll(sameKeyTasks) |> Async.AwaitTask |> Async.RunSynchronously
+let sameKeyResults =
+    Task.WhenAll(sameKeyTasks) |> Async.AwaitTask |> Async.RunSynchronously
 
-let sameKeySuccesses = sameKeyResults |> Array.filter (snd >> function Ok _ -> true  | _ -> false)
-let sameKeyFailures  = sameKeyResults |> Array.filter (snd >> function Error _ -> true | _ -> false)
+let sameKeySuccesses =
+    sameKeyResults
+    |> Array.filter (
+        snd
+        >> function
+            | Ok _ -> true
+            | _ -> false
+    )
+
+let sameKeyFailures =
+    sameKeyResults
+    |> Array.filter (
+        snd
+        >> function
+            | Error _ -> true
+            | _ -> false
+    )
 
 printfn "  Total    : %d" sameKeyResults.Length
 printfn "  Successes: %d (expected 1)" sameKeySuccesses.Length
@@ -107,7 +135,12 @@ printfn "  DB writes: %d (writes happen on eviction, not immediately)" dbWriteCo
 if sameKeyFailures.Length > 0 then
     // Show unique error messages only
     sameKeyFailures
-    |> Array.map (snd >> function Error e -> e | Ok _ -> "")
+    |> Array.map (
+        snd
+        >> function
+            | Error e -> e
+            | Ok _ -> ""
+    )
     |> Array.distinct
     |> Array.iter (printfn "  Error: %s")
 

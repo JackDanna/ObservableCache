@@ -13,13 +13,14 @@ open FSharp.Control.Reactive
 // Simulated "database" — latency ensures concurrent updates truly overlap.
 // ---------------------------------------------------------------------------
 
-let dbReadLatencyMs  = 100
+let dbReadLatencyMs = 100
 let dbWriteLatencyMs = 100
-let mutable dbReadCount  = 0
+let mutable dbReadCount = 0
 let mutable dbWriteCount = 0
 
 let readFromDb (itemId: string) : Async<Result<string, string>> =
     Interlocked.Increment(&dbReadCount) |> ignore
+
     async {
         do! Async.Sleep dbReadLatencyMs
         return Ok $"base"
@@ -27,17 +28,16 @@ let readFromDb (itemId: string) : Async<Result<string, string>> =
 
 let saveToDb (item: string) : Async<Result<string, string>> =
     Interlocked.Increment(&dbWriteCount) |> ignore
+
     async {
         do! Async.Sleep dbWriteLatencyMs
         return Ok item
     }
 
-let deleteFromDb (_itemId: string) : Async<Result<unit, string>> =
-    async.Return (Ok ())
+let deleteFromDb (_itemId: string) : Async<Result<unit, string>> = async.Return(Ok())
 
 // Each update message appends "+N" so we can reconstruct the expected final value.
-let update (msg: string) (item: string) : string =
-    $"{item}+{msg}"
+let update (msg: string) (item: string) : string = $"{item}+{msg}"
 
 // ---------------------------------------------------------------------------
 // Build the cache
@@ -46,12 +46,7 @@ let update (msg: string) (item: string) : string =
 let evictionDelay = TimeSpan.FromSeconds 30.0
 
 let create, read, updateDispatch, delete, _output =
-    ObservableCache.createHelperFunctions
-        saveToDb
-        readFromDb
-        deleteFromDb
-        update
-        evictionDelay
+    ObservableCache.createHelperFunctions saveToDb readFromDb deleteFromDb update evictionDelay
 
 // ---------------------------------------------------------------------------
 // Concurrent-update stress test
@@ -91,19 +86,34 @@ let results = Task.WhenAll(tasks) |> Async.AwaitTask |> Async.RunSynchronously
 
 let successes =
     results
-    |> Array.filter (snd >> function Ok _ -> true | Error _ -> false)
+    |> Array.filter (
+        snd
+        >> function
+            | Ok _ -> true
+            | Error _ -> false
+    )
 
 let failures =
     results
-    |> Array.filter (snd >> function Error _ -> true | Ok _ -> false)
+    |> Array.filter (
+        snd
+        >> function
+            | Error _ -> true
+            | Ok _ -> false
+    )
 
 // Verify the final cached value contains all applied messages.
 // Each successful update should have appended "+N" exactly once.
 let finalValues =
-    successes |> Array.map (snd >> function Ok v -> v | Error _ -> "")
+    successes
+    |> Array.map (
+        snd
+        >> function
+            | Ok v -> v
+            | Error _ -> ""
+    )
 
-let lastValue =
-    finalValues |> Array.tryLast |> Option.defaultValue "(none)"
+let lastValue = finalValues |> Array.tryLast |> Option.defaultValue "(none)"
 
 // Count how many distinct "+N" tokens appear in the last reported value.
 let appliedUpdates =
@@ -123,10 +133,12 @@ printfn ""
 
 if failures.Length > 0 then
     printfn "FAILURES:"
+
     for (i, result) in failures do
         match result with
         | Error err -> printfn "  Updater %d -> Error: %s" i err
         | Ok _ -> ()
+
     printfn ""
 
 let allSucceeded = failures.Length = 0
@@ -140,7 +152,11 @@ else
 if allUpdatesApplied then
     printfn "PASS: all %d updates are reflected in the final value." concurrentUpdaters
 else
-    printfn "WARN: only %d / %d updates found in the final value — some may have been lost." appliedUpdates.Length concurrentUpdaters
+    printfn
+        "WARN: only %d / %d updates found in the final value — some may have been lost."
+        appliedUpdates.Length
+        concurrentUpdaters
+
     printfn "      (This can happen if TryUpdate lost a race — lost-update anomaly.)"
 
 printfn ""

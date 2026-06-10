@@ -19,19 +19,17 @@ let mutable dbReadCount = 0
 
 let readFromDb (itemId: string) : Async<Result<string, string>> =
     Interlocked.Increment(&dbReadCount) |> ignore
+
     async {
         do! Async.Sleep dbReadLatencyMs
         return Ok $"db-value-for-{itemId}"
     }
 
-let saveToDb (item: string) : Async<Result<string, string>> =
-    async.Return (Ok item)
+let saveToDb (item: string) : Async<Result<string, string>> = async.Return(Ok item)
 
-let deleteFromDb (_itemId: string) : Async<Result<unit, string>> =
-    async.Return (Ok ())
+let deleteFromDb (_itemId: string) : Async<Result<unit, string>> = async.Return(Ok())
 
-let update (msg: string) (item: string) : string =
-    $"{item}+{msg}"
+let update (msg: string) (item: string) : string = $"{item}+{msg}"
 
 // ---------------------------------------------------------------------------
 // Build the cache
@@ -40,12 +38,7 @@ let update (msg: string) (item: string) : string =
 let evictionDelay = TimeSpan.FromMilliseconds 500.0
 
 let create, read, updateDispatch, delete, _output =
-    ObservableCache.createHelperFunctions
-        saveToDb
-        readFromDb
-        deleteFromDb
-        update
-        evictionDelay
+    ObservableCache.createHelperFunctions saveToDb readFromDb deleteFromDb update evictionDelay
 
 // ---------------------------------------------------------------------------
 // Concurrent-read stress test
@@ -76,11 +69,21 @@ let results = Task.WhenAll(tasks) |> Async.AwaitTask |> Async.RunSynchronously
 
 let successes =
     results
-    |> Array.filter (snd >> function Ok _ -> true | Error _ -> false)
+    |> Array.filter (
+        snd
+        >> function
+            | Ok _ -> true
+            | Error _ -> false
+    )
 
 let failures =
     results
-    |> Array.filter (snd >> function Error _ -> true | Ok _ -> false)
+    |> Array.filter (
+        snd
+        >> function
+            | Error _ -> true
+            | Ok _ -> false
+    )
 
 printfn "Results:"
 printfn "  Total    : %d" results.Length
@@ -91,10 +94,12 @@ printfn ""
 
 if failures.Length > 0 then
     printfn "FAILURES (race condition detected!):"
+
     for (i, result) in failures do
         match result with
         | Error err -> printfn "  Reader %d -> Error: %s" i err
-        | Ok _      -> ()
+        | Ok _ -> ()
+
     printfn ""
 
 if dbReadCount = 1 then

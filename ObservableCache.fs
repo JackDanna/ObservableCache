@@ -13,9 +13,10 @@ type CacheInput<'Item, 'ItemId, 'ItemMsg> =
     | UpdateItem of 'ItemId * 'ItemMsg
     | DeleteItem of 'ItemId
 
-type Input<'Item, 'ItemId, 'ItemMsg> =
-    { CorrelationId: Guid
-      CacheInput: CacheInput<'Item, 'ItemId, 'ItemMsg> }
+type Input<'Item, 'ItemId, 'ItemMsg> = {
+    CorrelationId: Guid
+    CacheInput: CacheInput<'Item, 'ItemId, 'ItemMsg>
+}
 
 type CacheOutput<'ItemId, 'Item> =
     | CreateItemOnDB of 'ItemId * Result<'Item, string>
@@ -23,9 +24,10 @@ type CacheOutput<'ItemId, 'Item> =
     | UpdateItemOnDB of 'ItemId * Result<'Item, string>
     | DeleteItemOnDB of 'ItemId * Result<unit, string>
 
-type Output<'ItemId, 'Item> =
-    { CorrelationId: Guid
-      CacheOutput: CacheOutput<'ItemId, 'Item> }
+type Output<'ItemId, 'Item> = {
+    CorrelationId: Guid
+    CacheOutput: CacheOutput<'ItemId, 'Item>
+}
 
 let cacheInputToItemId =
     function
@@ -50,10 +52,7 @@ let obsCache
             item
             |> createOrUpdateItemOnDatabase
             |> Observable.ofAsync
-            |> Observable.map (fun result ->
-                itemId,
-                result
-            )
+            |> Observable.map (fun result -> itemId, result)
 
     inputObservable
     |> Observable.groupByUntil
@@ -145,9 +144,10 @@ let obsCache
                             | Ok() -> Ok()
                             | Error err -> Error err)
                     |> Observable.map DeleteItemOnDB
-                |> Observable.map (fun co ->
-                    { CorrelationId = correlationId
-                      CacheOutput = co }))
+                |> Observable.map (fun co -> {
+                    CorrelationId = correlationId
+                    CacheOutput = co
+                }))
             |> Observable.subscribe (fun output -> ())
             |> ignore
 
@@ -197,34 +197,44 @@ let createHelperFunctions
             | false, _ -> ())
     |> ignore
 
-    let dispatch msg =
-        async {
-            let! ct = Async.CancellationToken
-            return!
-                Async.FromContinuations(fun (onSuccess, _, onCancel) ->
-                    let correlationId = Guid.NewGuid()
-                    pendingItemRequests[correlationId] <- onSuccess
-                    ct.Register(fun () ->
-                        match pendingItemRequests.TryRemove correlationId with
-                        | true, _ -> onCancel (OperationCanceledException ct)
-                        | false, _ -> ())
-                    |> ignore
-                    inputSubject.OnNext { CorrelationId = correlationId; CacheInput = msg })
-        }
+    let dispatch msg = async {
+        let! ct = Async.CancellationToken
 
-    let dispatchDelete msg =
-        async {
-            let! ct = Async.CancellationToken
-            return!
-                Async.FromContinuations(fun (onSuccess, _, onCancel) ->
-                    let correlationId = Guid.NewGuid()
-                    pendingDeleteRequests[correlationId] <- onSuccess
-                    ct.Register(fun () ->
-                        match pendingDeleteRequests.TryRemove correlationId with
-                        | true, _ -> onCancel (OperationCanceledException ct)
-                        | false, _ -> ())
-                    |> ignore
-                    inputSubject.OnNext { CorrelationId = correlationId; CacheInput = msg })
-        }
+        return!
+            Async.FromContinuations(fun (onSuccess, _, onCancel) ->
+                let correlationId = Guid.NewGuid()
+                pendingItemRequests[correlationId] <- onSuccess
+
+                ct.Register(fun () ->
+                    match pendingItemRequests.TryRemove correlationId with
+                    | true, _ -> onCancel (OperationCanceledException ct)
+                    | false, _ -> ())
+                |> ignore
+
+                inputSubject.OnNext {
+                    CorrelationId = correlationId
+                    CacheInput = msg
+                })
+    }
+
+    let dispatchDelete msg = async {
+        let! ct = Async.CancellationToken
+
+        return!
+            Async.FromContinuations(fun (onSuccess, _, onCancel) ->
+                let correlationId = Guid.NewGuid()
+                pendingDeleteRequests[correlationId] <- onSuccess
+
+                ct.Register(fun () ->
+                    match pendingDeleteRequests.TryRemove correlationId with
+                    | true, _ -> onCancel (OperationCanceledException ct)
+                    | false, _ -> ())
+                |> ignore
+
+                inputSubject.OnNext {
+                    CorrelationId = correlationId
+                    CacheInput = msg
+                })
+    }
 
     CreateItem >> dispatch, ReadItem >> dispatch, UpdateItem >> dispatch, DeleteItem >> dispatchDelete, outputObservable
