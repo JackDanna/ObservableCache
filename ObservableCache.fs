@@ -206,7 +206,7 @@ let createHelperFunctions
             { CorrelationId = correlationId
               CacheInput = msg }
 
-        tcs.Task
+        tcs.Task |> Async.AwaitTask
 
     let dispatchDelete msg =
         let correlationId = Guid.NewGuid()
@@ -217,6 +217,6 @@ let createHelperFunctions
             { CorrelationId = correlationId
               CacheInput = msg }
 
-        tcs.Task
+        tcs.Task |> Async.AwaitTask
 
     CreateItem >> dispatch, ReadItem >> dispatch, UpdateItem >> dispatch, DeleteItem >> dispatchDelete, outputObservable
